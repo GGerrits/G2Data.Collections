@@ -1,558 +1,616 @@
-# PolymorphicGraph BSON Serializer
+# PolymorphicGraph
 
-A custom BSON serializer for serializing and deserializing `PolymorphicGraph<TNodeId>` instances with support for polymorphic node types using MongoDB.Bson.
+A high-performance, thread-safe polymorphic graph data structure for .NET with built-in cycle detection and flexible traversal strategies.
 
-## Features
+[![.NET](https://img.shields.io/badge/.NET-8.0-purple)](https://dotnet.microsoft.com/)
+[![C#](https://img.shields.io/badge/C%23-12.0-blue)](https://docs.microsoft.com/en-us/dotnet/csharp/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-✅ **MongoDB Integration** - Fully compatible with MongoDB.Driver for database storage  
-✅ **Polymorphic Node Support** - Serialize and deserialize different node types in the same graph  
-✅ **Type Discrimination** - Uses BSON type discriminator (default: `_t`)  
-✅ **Fluent API** - Easy-to-use factory for configuring the serializer  
-✅ **Binary Efficiency** - BSON's binary format is more compact than JSON  
-✅ **File Storage** - Save/load graphs to/from .bson files  
-✅ **Generic Support** - Works with any `TNodeId` type that implements `IEquatable<TNodeId>`
+## 🌟 Features
 
-## Installation
+- **Thread-Safe**: Full concurrent operation support using `ConcurrentDictionary` and fine-grained locking
+- **Polymorphic Design**: Abstract base class allows custom node types with domain-specific data
+- **Cycle Detection**: Built-in algorithms to detect and prevent cycles
+- **Flexible Traversal**: Strategy pattern implementation with DFS and BFS out of the box
+- **MongoDB Integration**: Full BSON serialization support for polymorphic graphs
+- **Type-Safe**: Generic implementation with `IEquatable<TNodeId>` constraint
+- **High Performance**: O(1) node/edge operations using HashSet-based connections
+- **Complete CRUD**: Full support for adding, removing, and querying nodes and edges
+- **Read-Only Collections**: Immutable access to connections prevents unauthorized modifications
 
-Install the MongoDB.Bson NuGet package:
+## 📋 Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+- [API Reference](#api-reference)
+- [Usage Examples](#usage-examples)
+- [MongoDB Integration](#mongodb-integration)
+- [Performance](#performance)
+- [Thread Safety](#thread-safety)
+- [Contributing](#contributing)
+- [License](#license)
+
+## 🚀 Installation
+
+### Option 1: Add to your project
+
+Copy the `PolymorphicGraph.cs` file to your project:
 
 ```bash
-dotnet add package MongoDB.Bson
-dotnet add package MongoDB.Driver  # If using MongoDB
+# Navigate to your project directory
+cd YourProject
+
+# Copy the file
+cp path/to/PolymorphicGraph.cs ./Collections/
 ```
 
-## BSON Format
+### Option 2: Include in your solution
 
-The serializer uses a structure similar to the JSON converter:
+Add the file to your `.csproj`:
+
+```xml
+<ItemGroup>
+  <Compile Include="Collections\PolymorphicGraph.cs" />
+</ItemGroup>
+```
+
+## 🎯 Quick Start
+
+### 1. Define Your Node Type
+
+```csharp
+using G2Data.Collections;
+
+// Create a custom node type
+public class PersonNode : GraphNode<int>
+{
+    public string Name { get; set; }
+    public int Age { get; set; }
+
+    public PersonNode(int id, string name, int age) : base(id)
+    {
+        Name = name;
+        Age = age;
+    }
+}
+```
+
+### 2. Create and Use a Graph
+
+```csharp
+// Create a graph
+var socialNetwork = new PolymorphicGraph<int>();
+
+// Add nodes
+var alice = new PersonNode(1, "Alice", 30);
+var bob = new PersonNode(2, "Bob", 25);
+var charlie = new PersonNode(3, "Charlie", 35);
+
+socialNetwork.AddNode(alice);
+socialNetwork.AddNode(bob);
+socialNetwork.AddNode(charlie);
+
+// Create relationships (edges)
+socialNetwork.AddEdge(1, 2); // Alice knows Bob
+socialNetwork.AddEdge(2, 3); // Bob knows Charlie
+socialNetwork.AddEdge(1, 3); // Alice knows Charlie
+
+// Traverse the network
+foreach (var person in socialNetwork.TraverseGraph(1, new BFSTraversal()))
+{
+    Console.WriteLine($"{person.Name} (Age: {person.Age})");
+}
+```
+
+Output:
+```
+Alice (Age: 30)
+Bob (Age: 25)
+Charlie (Age: 35)
+```
+
+## 🧩 Core Concepts
+
+### Graph Structure
+
+The `PolymorphicGraph` represents a **directed graph** where:
+- **Nodes** are identified by a unique ID of type `TNodeId`
+- **Edges** connect nodes in a specific direction
+- Each node can have multiple outgoing connections
+- Cycles can be detected and prevented
+
+### Node Types
+
+All nodes must inherit from `GraphNode<TNodeId>`:
+
+```csharp
+public abstract class GraphNode<TNodeId>(TNodeId id)
+    where TNodeId : IEquatable<TNodeId>
+{
+    public TNodeId Id { get; init; }
+    public IReadOnlyCollection<GraphNode<TNodeId>> Connections { get; }
+    // ...
+}
+```
+
+### Traversal Strategies
+
+Two traversal strategies are provided:
+
+- **DFS (Depth-First Search)**: Explores as far as possible along each branch
+- **BFS (Breadth-First Search)**: Explores all neighbors before moving to next level
+
+You can implement custom strategies by extending `GraphTraversal`.
+
+## 📚 API Reference
+
+### PolymorphicGraph Methods
+
+#### Node Operations
+
+| Method | Description | Returns | Complexity |
+|--------|-------------|---------|------------|
+| `AddNode(GraphNode<TNodeId> node)` | Add a node to the graph | `void` | O(1) |
+| `RemoveNode(TNodeId id)` | Remove a node and all its edges | `bool` | O(V) |
+| `GetNode(TNodeId id)` | Retrieve a node by ID | `GraphNode<TNodeId>?` | O(1) |
+| `ContainsNode(TNodeId id)` | Check if node exists | `bool` | O(1) |
+| `GetAllNodes()` | Get all nodes in the graph | `IEnumerable<GraphNode<TNodeId>>` | O(V) |
+| `Clear()` | Remove all nodes | `void` | O(1) |
+
+#### Edge Operations
+
+| Method | Description | Returns | Complexity |
+|--------|-------------|---------|------------|
+| `AddEdge(TNodeId from, TNodeId to)` | Create an edge between nodes | `void` | O(1) |
+| `AddEdgeSafe(TNodeId from, TNodeId to, bool allowCycles)` | Add edge with cycle check | `bool` | O(V+E) |
+| `RemoveEdge(TNodeId from, TNodeId to)` | Remove a specific edge | `bool` | O(1) |
+
+#### Graph Analysis
+
+| Method | Description | Returns | Complexity |
+|--------|-------------|---------|------------|
+| `HasCycles()` | Detect if graph contains cycles | `bool` | O(V+E) |
+| `TraverseGraph(TNodeId startId, GraphTraversal strategy)` | Traverse graph with strategy | `IEnumerable<GraphNode<TNodeId>>` | O(V+E) |
+
+#### Properties
+
+| Property | Description | Type |
+|----------|-------------|------|
+| `NodeCount` | Number of nodes in the graph | `int` |
+
+### GraphNode Methods
+
+| Method | Description | Returns |
+|--------|-------------|---------|
+| `AddConnection(GraphNode<TNodeId> node)` | Add a connection to another node | `void` |
+
+### Traversal Strategies
+
+| Class | Description |
+|-------|-------------|
+| `DFSTraversal` | Depth-first search traversal |
+| `BFSTraversal` | Breadth-first search traversal |
+
+## 💡 Usage Examples
+
+### Example 1: Task Dependency Graph
+
+```csharp
+public class TaskNode : GraphNode<string>
+{
+    public string Description { get; set; }
+    public TimeSpan EstimatedDuration { get; set; }
+    public bool IsCompleted { get; set; }
+
+    public TaskNode(string id, string description, TimeSpan duration) : base(id)
+    {
+        Description = description;
+        EstimatedDuration = duration;
+        IsCompleted = false;
+    }
+}
+
+// Create a task dependency graph
+var projectTasks = new PolymorphicGraph<string>();
+
+var design = new TaskNode("design", "Design system", TimeSpan.FromHours(8));
+var implement = new TaskNode("implement", "Implement features", TimeSpan.FromHours(40));
+var test = new TaskNode("test", "Test system", TimeSpan.FromHours(16));
+var deploy = new TaskNode("deploy", "Deploy to production", TimeSpan.FromHours(4));
+
+projectTasks.AddNode(design);
+projectTasks.AddNode(implement);
+projectTasks.AddNode(test);
+projectTasks.AddNode(deploy);
+
+// Define dependencies
+projectTasks.AddEdge("design", "implement");
+projectTasks.AddEdge("implement", "test");
+projectTasks.AddEdge("test", "deploy");
+
+// Verify no circular dependencies
+if (projectTasks.HasCycles())
+{
+    Console.WriteLine("Warning: Circular task dependencies detected!");
+}
+
+// Get tasks in execution order (BFS from start)
+Console.WriteLine("Task execution order:");
+foreach (var task in projectTasks.TraverseGraph("design", new BFSTraversal()))
+{
+    Console.WriteLine($"- {task.Description} ({task.EstimatedDuration.TotalHours}h)");
+}
+```
+
+### Example 2: File System Dependencies
+
+```csharp
+public class FileNode : GraphNode<string>
+{
+    public string FilePath { get; set; }
+    public long Size { get; set; }
+    public DateTime LastModified { get; set; }
+
+    public FileNode(string id, string path, long size) : base(id)
+    {
+        FilePath = path;
+        Size = size;
+        LastModified = DateTime.Now;
+    }
+}
+
+var fileGraph = new PolymorphicGraph<string>();
+
+// Add files
+var main = new FileNode("main.cs", "/src/main.cs", 1024);
+var utils = new FileNode("utils.cs", "/src/utils.cs", 512);
+var config = new FileNode("config.json", "/config.json", 256);
+
+fileGraph.AddNode(main);
+fileGraph.AddNode(utils);
+fileGraph.AddNode(config);
+
+// Define dependencies
+fileGraph.AddEdge("main.cs", "utils.cs");
+fileGraph.AddEdge("main.cs", "config.json");
+
+// Prevent circular dependencies
+bool added = fileGraph.AddEdgeSafe("utils.cs", "main.cs", allowCycles: false);
+if (!added)
+{
+    Console.WriteLine("Cannot add edge: would create circular dependency");
+}
+```
+
+### Example 3: Social Network
+
+```csharp
+public class UserNode : GraphNode<Guid>
+{
+    public string Username { get; set; }
+    public string Email { get; set; }
+    public List<string> Interests { get; set; }
+
+    public UserNode(Guid id, string username, string email) : base(id)
+    {
+        Username = username;
+        Email = email;
+        Interests = new List<string>();
+    }
+}
+
+var network = new PolymorphicGraph<Guid>();
+
+var user1 = new UserNode(Guid.NewGuid(), "alice", "alice@example.com");
+var user2 = new UserNode(Guid.NewGuid(), "bob", "bob@example.com");
+var user3 = new UserNode(Guid.NewGuid(), "charlie", "charlie@example.com");
+
+network.AddNode(user1);
+network.AddNode(user2);
+network.AddNode(user3);
+
+// Create friendships (directed)
+network.AddEdge(user1.Id, user2.Id); // Alice follows Bob
+network.AddEdge(user2.Id, user1.Id); // Bob follows Alice (mutual)
+network.AddEdge(user1.Id, user3.Id); // Alice follows Charlie
+
+// Find all users Alice follows (direct connections)
+var aliceNode = network.GetNode(user1.Id);
+if (aliceNode != null)
+{
+    Console.WriteLine($"{aliceNode.Username} follows:");
+    foreach (var connection in aliceNode.Connections)
+    {
+        Console.WriteLine($"  - {connection.Username}");
+    }
+}
+
+// Find all users in Alice's network (BFS traversal)
+Console.WriteLine($"\n{user1.Username}'s extended network:");
+foreach (var user in network.TraverseGraph(user1.Id, new BFSTraversal()))
+{
+    Console.WriteLine($"  - {user.Username}");
+}
+```
+
+### Example 4: Custom Traversal Strategy
+
+```csharp
+// Implement a custom traversal that limits depth
+public class LimitedDepthTraversal : GraphTraversal
+{
+    private readonly int maxDepth;
+
+    public LimitedDepthTraversal(int maxDepth)
+    {
+        this.maxDepth = maxDepth;
+    }
+
+    public override IEnumerable<GraphNode<TNodeId>> Traverse<TNodeId>(GraphNode<TNodeId> startNode)
+    {
+        ArgumentNullException.ThrowIfNull(startNode);
+
+        var visited = new HashSet<TNodeId>();
+        var queue = new Queue<(GraphNode<TNodeId> node, int depth)>();
+
+        queue.Enqueue((startNode, 0));
+        visited.Add(startNode.Id);
+
+        while (queue.Count > 0)
+        {
+            var (node, depth) = queue.Dequeue();
+
+            yield return node;
+
+            if (depth < maxDepth)
+            {
+                foreach (var connection in node.GetConnections())
+                {
+                    if (!visited.Contains(connection.Id))
+                    {
+                        visited.Add(connection.Id);
+                        queue.Enqueue((connection, depth + 1));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Usage
+var graph = new PolymorphicGraph<int>();
+// ... add nodes and edges ...
+
+// Only traverse 2 levels deep
+foreach (var node in graph.TraverseGraph(1, new LimitedDepthTraversal(2)))
+{
+    Console.WriteLine(node.Id);
+}
+```
+
+### Example 5: Concurrent Operations
+
+```csharp
+var graph = new PolymorphicGraph<int>();
+
+// Thread-safe concurrent node addition
+var tasks = new List<Task>();
+for (int i = 0; i < 1000; i++)
+{
+    int nodeId = i;
+    tasks.Add(Task.Run(() =>
+    {
+        var node = new TaskNode($"task_{nodeId}", $"Task {nodeId}", TimeSpan.FromMinutes(nodeId));
+        graph.AddNode(node);
+    }));
+}
+
+await Task.WhenAll(tasks);
+
+Console.WriteLine($"Successfully added {graph.NodeCount} nodes concurrently");
+
+// Thread-safe concurrent edge addition
+tasks.Clear();
+for (int i = 0; i < 999; i++)
+{
+    int fromId = i;
+    tasks.Add(Task.Run(() =>
+    {
+        graph.AddEdgeSafe($"task_{fromId}", $"task_{fromId + 1}");
+    }));
+}
+
+await Task.WhenAll(tasks);
+```
+
+## 🗄️ MongoDB Integration
+
+PolymorphicGraph includes full MongoDB support with a custom BSON serializer that handles polymorphic node types.
+
+### Quick MongoDB Setup
+
+```csharp
+// 1. Register the serializer (do this once at startup)
+PolymorphicGraphBsonSerializerRegistration.RegisterSerializer<int>(factory =>
+{
+    factory.RegisterNodeType<PersonNode>("Person")
+           .RegisterNodeType<CompanyNode>("Company");
+});
+
+// 2. Use with MongoDB
+var client = new MongoClient("mongodb://localhost:27017");
+var database = client.GetDatabase("mydb");
+var collection = database.GetCollection<PolymorphicGraph<int>>("graphs");
+
+// 3. Save and retrieve graphs
+var graph = new PolymorphicGraph<int>();
+graph.AddNode(new PersonNode(1, "Alice", 30, "alice@example.com"));
+graph.AddNode(new CompanyNode(2, "TechCorp", "Technology", 500));
+graph.AddEdge(1, 2);
+
+await collection.InsertOneAsync(graph);
+var retrieved = await collection.Find(_ => true).FirstOrDefaultAsync();
+```
+
+### Features
+
+- ✅ Polymorphic node type serialization
+- ✅ Preserves graph structure (nodes and edges)
+- ✅ Handles cycles correctly
+- ✅ Custom type discriminators
+- ✅ Thread-safe operations
+
+### BSON Document Structure
+
+Graphs are serialized as:
 
 ```json
 {
   "Nodes": [
     {
-      "_t": "TypeName",
-      "Id": "node-id",
-      "property1": "value1",
-      ...
+      "_t": "Person",
+      "Id": 1,
+      "name": "Alice",
+      "age": 30
+    },
+    {
+      "_t": "Company",
+      "Id": 2,
+      "name": "TechCorp",
+      "industry": "Technology"
     }
   ],
   "Edges": [
     {
-      "From": "source-id",
-      "To": "target-id"
+      "From": 1,
+      "To": 2
     }
   ]
 }
 ```
 
-### Key Differences from JSON Converter
+**📖 See [MONGODB_INTEGRATION.md](MONGODB_INTEGRATION.md) for complete documentation, examples, and best practices.**
 
-- **Type Discriminator**: Uses `_t` by default (MongoDB convention) instead of `$type`
-- **Binary Format**: BSON is a binary format, more efficient than JSON
-- **MongoDB Native**: Seamlessly integrates with MongoDB collections
-- **Type Safety**: BSON has native support for more data types (DateTime, ObjectId, etc.)
+## ⚡ Performance
 
-## Basic Usage
+### Time Complexity
 
-### 1. Define Your Node Types
+| Operation | Average Case | Worst Case |
+|-----------|--------------|------------|
+| Add Node | O(1) | O(1) |
+| Remove Node | O(V) | O(V) |
+| Add Edge | O(1) | O(1) |
+| Add Edge Safe | O(V + E) | O(V + E) |
+| Remove Edge | O(1) | O(1) |
+| Get Node | O(1) | O(1) |
+| Has Cycles | O(V + E) | O(V + E) |
+| DFS/BFS Traversal | O(V + E) | O(V + E) |
 
+*Where V = number of vertices (nodes), E = number of edges*
+
+### Space Complexity
+
+- **Graph Storage**: O(V + E)
+- **Node Connections**: O(E) using HashSet
+- **Traversal Operations**: O(V) for visited tracking
+
+### Performance Optimizations
+
+1. **HashSet for Connections**: O(1) add/remove/contains operations
+2. **ConcurrentDictionary**: Thread-safe with minimal locking
+3. **Lazy Enumeration**: Traversal methods use `yield return` for memory efficiency
+4. **Fine-grained Locking**: Separate locks for graph and node operations
+
+## 🔒 Thread Safety
+
+The implementation is **fully thread-safe**:
+
+### Safe Operations
+- ✅ Concurrent node additions from multiple threads
+- ✅ Concurrent edge additions/removals
+- ✅ Concurrent graph queries (GetNode, ContainsNode, etc.)
+- ✅ Concurrent traversals
+- ✅ Mixed read/write operations
+
+### Locking Strategy
+- **Graph Level**: Uses `lockObject` for structural changes
+- **Node Level**: Uses `connectionLock` for connection modifications
+- **ConcurrentDictionary**: Provides lock-free reads for node lookups
+
+### Example: Thread-Safe Usage
 ```csharp
-public class PersonNode : GraphNode<string>
+var graph = new PolymorphicGraph<int>();
+
+// Multiple threads can safely add nodes
+Parallel.For(0, 100, i =>
 {
-    public PersonNode(string id) : base(id) { }
-
-    [BsonElement("name")]
-    public string Name { get; set; }
-
-    [BsonElement("age")]
-    public int Age { get; set; }
-}
-
-public class CompanyNode : GraphNode<string>
-{
-    public CompanyNode(string id) : base(id) { }
-
-    [BsonElement("companyName")]
-    public string CompanyName { get; set; }
-
-    [BsonElement("industry")]
-    public string Industry { get; set; }
-}
-```
-
-### 2. Register the Serializer
-
-```csharp
-// Create and register the serializer
-var serializer = new PolymorphicGraphBsonSerializerFactory<string>()
-    .RegisterNodeType<PersonNode>("Person")
-    .RegisterNodeType<CompanyNode>("Company")
-    .Build();
-
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(serializer);
-```
-
-### 3. Serialize and Deserialize
-
-```csharp
-// Create a graph
-var graph = new PolymorphicGraph<string>();
-graph.AddNode(new PersonNode("alice") { Name = "Alice", Age = 30 });
-graph.AddNode(new CompanyNode("techcorp") { CompanyName = "TechCorp" });
-graph.AddEdge("alice", "techcorp");
-
-// Serialize to BSON bytes
-byte[] bson = graph.ToBson();
-
-// Deserialize from BSON bytes
-var deserializedGraph = BsonSerializer.Deserialize<PolymorphicGraph<string>>(bson);
-```
-
-## MongoDB Integration
-
-### Storing Graphs in MongoDB
-
-```csharp
-// Register the serializer
-var serializer = new PolymorphicGraphBsonSerializerFactory<string>()
-    .RegisterNodeType<PersonNode>("Person")
-    .RegisterNodeType<CompanyNode>("Company")
-    .Build();
-
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(serializer);
-
-// Connect to MongoDB
-var client = new MongoClient("mongodb://localhost:27017");
-var database = client.GetDatabase("graphdb");
-var collection = database.GetCollection<BsonDocument>("graphs");
-
-// Create a graph
-var graph = new PolymorphicGraph<string>();
-// ... add nodes and edges
-
-// Store in MongoDB
-var document = new BsonDocument
-{
-    { "_id", ObjectId.GenerateNewId() },
-    { "name", "MyGraph" },
-    { "createdAt", DateTime.UtcNow },
-    { "graph", graph.ToBson() }
-};
-
-await collection.InsertOneAsync(document);
-```
-
-### Retrieving Graphs from MongoDB
-
-```csharp
-// Find the document
-var filter = Builders<BsonDocument>.Filter.Eq("name", "MyGraph");
-var document = await collection.Find(filter).FirstOrDefaultAsync();
-
-// Extract and deserialize the graph
-var graphBytes = document["graph"].AsBsonBinaryData.Bytes;
-var graph = BsonSerializer.Deserialize<PolymorphicGraph<string>>(graphBytes);
-```
-
-### Using Strongly-Typed Collections
-
-```csharp
-// Define a wrapper class
-public class GraphDocument
-{
-    [BsonId]
-    public ObjectId Id { get; set; }
-    
-    public string Name { get; set; }
-    
-    public DateTime CreatedAt { get; set; }
-    
-    public PolymorphicGraph<string> Graph { get; set; }
-}
-
-// Use strongly-typed collection
-var collection = database.GetCollection<GraphDocument>("graphs");
-
-var doc = new GraphDocument
-{
-    Name = "MyGraph",
-    CreatedAt = DateTime.UtcNow,
-    Graph = graph
-};
-
-await collection.InsertOneAsync(doc);
-```
-
-## File Storage
-
-### Save to File
-
-```csharp
-string filename = "graph.bson";
-
-using (var fileStream = new FileStream(filename, FileMode.Create))
-using (var writer = new BsonBinaryWriter(fileStream))
-{
-    var context = BsonSerializationContext.CreateRoot(writer);
-    serializer.Serialize(context, new BsonSerializationArgs(), graph);
-}
-```
-
-### Load from File
-
-```csharp
-PolymorphicGraph<string> graph;
-
-using (var fileStream = new FileStream(filename, FileMode.Open))
-using (var reader = new BsonBinaryReader(fileStream))
-{
-    var context = BsonDeserializationContext.CreateRoot(reader);
-    graph = serializer.Deserialize(context, new BsonDeserializationArgs());
-}
-```
-
-## Advanced Configuration
-
-### Custom Type Discriminator
-
-```csharp
-var serializer = new PolymorphicGraphBsonSerializerFactory<string>()
-    .RegisterNodeType<PersonNode>("Person")
-    .RegisterNodeType<CompanyNode>("Company")
-    .WithDiscriminatorElement("nodeType")  // Custom discriminator
-    .Build();
-```
-
-### Custom Node Serializers
-
-```csharp
-// Define a custom serializer for a specific node type
-public class LocationNodeSerializer : SerializerBase<LocationNode>
-{
-    public override LocationNode Deserialize(
-        BsonDeserializationContext context, 
-        BsonDeserializationArgs args)
-    {
-        // Custom deserialization logic
-    }
-
-    public override void Serialize(
-        BsonSerializationContext context, 
-        BsonSerializationArgs args, 
-        LocationNode value)
-    {
-        // Custom serialization logic
-    }
-}
-
-// Register the custom serializer
-BsonSerializer.RegisterSerializer(typeof(LocationNode), new LocationNodeSerializer());
-
-// Then register the graph serializer as usual
-var serializer = new PolymorphicGraphBsonSerializerFactory<string>()
-    .RegisterNodeType<LocationNode>("Location")
-    .Build();
-```
-
-### Working with Different ID Types
-
-```csharp
-// Integer IDs
-var intSerializer = new PolymorphicGraphBsonSerializerFactory<int>()
-    .RegisterNodeType<TaskNode>("Task")
-    .Build();
-
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(intSerializer);
-
-// GUID IDs
-var guidSerializer = new PolymorphicGraphBsonSerializerFactory<Guid>()
-    .RegisterNodeType<EntityNode>("Entity")
-    .Build();
-
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(guidSerializer);
-
-// ObjectId IDs
-var objectIdSerializer = new PolymorphicGraphBsonSerializerFactory<ObjectId>()
-    .RegisterNodeType<DocumentNode>("Document")
-    .Build();
-
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(objectIdSerializer);
-```
-
-## API Reference
-
-### PolymorphicGraphBsonSerializer<TNodeId>
-
-Main serializer class for `PolymorphicGraph<TNodeId>`.
-
-**Constructor:**
-```csharp
-public PolymorphicGraphBsonSerializer(
-    Dictionary<string, Type> typeDiscriminators,
-    string discriminatorElementName = "_t")
-```
-
-**Methods:**
-```csharp
-public override PolymorphicGraph<TNodeId> Deserialize(
-    BsonDeserializationContext context, 
-    BsonDeserializationArgs args)
-
-public override void Serialize(
-    BsonSerializationContext context, 
-    BsonSerializationArgs args, 
-    PolymorphicGraph<TNodeId> value)
-```
-
-### PolymorphicGraphBsonSerializerFactory<TNodeId>
-
-Fluent API for creating serializers.
-
-**Methods:**
-
-```csharp
-// Register a node type
-RegisterNodeType<TNode>(string typeName)
-
-// Set custom discriminator element name
-WithDiscriminatorElement(string elementName)
-
-// Build the serializer
-Build()
-```
-
-### PolymorphicGraphBsonSerializerRegistration
-
-Helper class for registration.
-
-**Methods:**
-
-```csharp
-// Register the graph serializer globally
-RegisterSerializer<TNodeId>(PolymorphicGraphBsonSerializer<TNodeId> serializer)
-
-// Register custom node type serializer
-RegisterNodeTypeSerializer<TNode, TNodeId>(IBsonSerializer<TNode> serializer)
-```
-
-## BSON Attributes
-
-You can use MongoDB.Bson attributes to control serialization:
-
-```csharp
-public class PersonNode : GraphNode<string>
-{
-    public PersonNode(string id) : base(id) { }
-
-    [BsonElement("name")]  // Custom element name
-    public string Name { get; set; }
-
-    [BsonIgnore]  // Skip this property
-    public string TemporaryData { get; set; }
-
-    [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]  // DateTime options
-    public DateTime BirthDate { get; set; }
-
-    [BsonRepresentation(BsonType.String)]  // Store as string
-    public int SocialSecurityNumber { get; set; }
-
-    [BsonDefaultValue(0)]  // Default value if missing
-    public int Age { get; set; }
-}
-```
-
-## Performance Considerations
-
-### BSON vs JSON
-
-| Aspect | BSON | JSON |
-|--------|------|------|
-| Size | More compact for binary data | More compact for text |
-| Speed | Faster to parse | Slower to parse |
-| Type Safety | Native type support | String-based |
-| Readability | Requires tools to view | Human-readable |
-| MongoDB | Native format | Requires conversion |
-
-### Best Practices
-
-1. **Use BSON for:**
-   - MongoDB storage
-   - High-performance scenarios
-   - Binary data (images, files)
-   - Internal data transfer
-
-2. **Use JSON for:**
-   - API responses
-   - Configuration files
-   - Human-readable exports
-   - Web applications
-
-3. **Size Optimization:**
-   - Use shorter element names with `[BsonElement]`
-   - Consider compression for large graphs
-   - Store edges efficiently
-
-## Common Scenarios
-
-### Scenario 1: Social Network Graph in MongoDB
-
-```csharp
-// Register serializer
-var serializer = new PolymorphicGraphBsonSerializerFactory<string>()
-    .RegisterNodeType<UserNode>("User")
-    .RegisterNodeType<GroupNode>("Group")
-    .RegisterNodeType<PostNode>("Post")
-    .Build();
-
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(serializer);
-
-// Connect to MongoDB
-var client = new MongoClient("mongodb://localhost:27017");
-var database = client.GetDatabase("socialnetwork");
-var collection = database.GetCollection<BsonDocument>("graphs");
-
-// Create and store graph
-var graph = new PolymorphicGraph<string>();
-// ... build social network graph
-
-var doc = new BsonDocument
-{
-    { "userId", "user123" },
-    { "graphType", "friends" },
-    { "lastUpdated", DateTime.UtcNow },
-    { "graph", graph.ToBson() }
-};
-
-await collection.InsertOneAsync(doc);
-```
-
-### Scenario 2: Caching Graphs in Redis
-
-```csharp
-using StackExchange.Redis;
-
-// Serialize graph to BSON
-byte[] bson = graph.ToBson();
-
-// Store in Redis
-var redis = ConnectionMultiplexer.Connect("localhost");
-var db = redis.GetDatabase();
-await db.StringSetAsync("graph:social:user123", bson);
-
-// Retrieve from Redis
-byte[] cachedBson = await db.StringGetAsync("graph:social:user123");
-var cachedGraph = BsonSerializer.Deserialize<PolymorphicGraph<string>>(cachedBson);
-```
-
-### Scenario 3: Workflow Engine
-
-```csharp
-public class WorkflowStepNode : GraphNode<Guid>
-{
-    public WorkflowStepNode(Guid id) : base(id) { }
-    
-    [BsonElement("step")]
-    public string StepName { get; set; }
-    
-    [BsonElement("action")]
-    public string ActionType { get; set; }
-    
-    [BsonElement("config")]
-    public BsonDocument Configuration { get; set; }
-}
-
-// Store workflow definitions
-var serializer = new PolymorphicGraphBsonSerializerFactory<Guid>()
-    .RegisterNodeType<WorkflowStepNode>("Step")
-    .Build();
-
-var graph = new PolymorphicGraph<Guid>();
-// ... build workflow graph
-
-// Store in MongoDB for execution engine
-var collection = database.GetCollection<BsonDocument>("workflows");
-await collection.InsertOneAsync(new BsonDocument
-{
-    { "workflowId", workflowId },
-    { "definition", graph.ToBson() }
+    graph.AddNode(new MyNode(i, $"Node {i}"));
 });
-```
 
-## Error Handling
-
-```csharp
-try
+// Multiple threads can safely add edges
+Parallel.For(0, 99, i =>
 {
-    var graph = BsonSerializer.Deserialize<PolymorphicGraph<string>>(bson);
-}
-catch (BsonSerializationException ex)
-{
-    // Handle serialization errors (missing types, invalid format, etc.)
-    Console.WriteLine($"Serialization error: {ex.Message}");
-}
-catch (FormatException ex)
-{
-    // Handle invalid BSON format
-    Console.WriteLine($"Invalid BSON format: {ex.Message}");
-}
+    graph.AddEdge(i, i + 1);
+});
+
+// Safe to query while modifications are happening
+var nodeCount = graph.NodeCount; // Thread-safe
+var hasNode = graph.ContainsNode(50); // Thread-safe
 ```
 
-## Migration from JSON to BSON
+## 🧪 Testing
 
-If you're migrating from the JSON converter:
+The project includes comprehensive unit tests covering:
 
-```csharp
-// Read JSON
-string json = File.ReadAllText("graph.json");
-var graph = JsonSerializer.Deserialize<PolymorphicGraph<string>>(json, jsonOptions);
+- ✅ Basic CRUD operations
+- ✅ Null argument validation
+- ✅ Cycle detection algorithms
+- ✅ Traversal strategies (DFS, BFS)
+- ✅ Thread safety and concurrent operations
+- ✅ Edge cases and error conditions
+- ✅ Read-only collection enforcement
+- ✅ Complex multi-operation scenarios
 
-// Write BSON
-byte[] bson = graph.ToBson();
-File.WriteAllBytes("graph.bson", bson);
+Run tests:
+```bash
+dotnet test
 ```
 
-## Troubleshooting
+## 📖 Additional Documentation
 
-### Issue: "Type not registered"
+- **[IMPROVEMENTS.md](IMPROVEMENTS.md)** - Detailed explanation of all improvements and design decisions
+- **[PolymorphicGraphTests.cs](PolymorphicGraphTests.cs)** - Complete test suite with examples
 
-**Solution:** Ensure all node types are registered before deserialization:
+## 🤝 Contributing
 
-```csharp
-var serializer = new PolymorphicGraphBsonSerializerFactory<string>()
-    .RegisterNodeType<NodeType1>("Type1")
-    .RegisterNodeType<NodeType2>("Type2")
-    // Register ALL types
-    .Build();
+Contributions are welcome! Here's how you can help:
 
-PolymorphicGraphBsonSerializerRegistration.RegisterSerializer(serializer);
-```
+1. **Report Bugs**: Open an issue describing the bug and how to reproduce it
+2. **Suggest Features**: Open an issue with your feature request
+3. **Submit Pull Requests**: Fork the repo, make your changes, and submit a PR
 
-### Issue: "Circular reference detected"
+### Development Guidelines
+- Follow C# coding conventions
+- Add unit tests for new features
+- Update documentation as needed
+- Ensure all tests pass before submitting
 
-**Solution:** The serializer handles this by separating nodes and edges. If you still encounter this, ensure you're not trying to serialize the graph connections inline.
+## 📄 License
 
-### Issue: "Cannot deserialize ObjectId"
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**Solution:** Register the ObjectId serializer or use string IDs:
+## 🙏 Acknowledgments
 
-```csharp
-// Use ObjectId as node ID
-var serializer = new PolymorphicGraphBsonSerializerFactory<ObjectId>()
-    .RegisterNodeType<MyNode>("MyNode")
-    .Build();
-```
+- Built with modern C# 12 and .NET 8 features
+- Inspired by graph theory and data structure best practices
+- Designed for real-world production use
 
-## Comparison with JSON Converter
+## 📞 Support
 
-| Feature | BSON Serializer | JSON Converter |
-|---------|----------------|----------------|
-| MongoDB Integration | ✅ Native | ❌ Requires conversion |
-| File Size | Smaller for binary | Smaller for text |
-| Human Readable | ❌ No | ✅ Yes |
-| Performance | Faster | Slower |
-| Type Safety | Better | Good |
-| Default Discriminator | `_t` | `$type` |
-| Use Case | Databases, performance | APIs, configuration |
+- **Issues**: [GitHub Issues](https://github.com/yourusername/polymorphic-graph/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/polymorphic-graph/discussions)
 
-## License
+---
 
-This serializer is provided as-is for use with the PolymorphicGraph implementation.
+**Made with ❤️ for the .NET community**
