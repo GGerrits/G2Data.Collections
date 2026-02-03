@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace G2Data.Collections;
+namespace G2Data.Collections.Json;
 
 /// <summary>
 /// JSON converter for PolymorphicGraph that handles polymorphic node serialization/deserialization
