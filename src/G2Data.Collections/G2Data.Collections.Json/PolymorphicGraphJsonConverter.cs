@@ -13,7 +13,7 @@ namespace G2Data.Collections.Json;
 /// <param name="discriminatorPropertyName">Name of the property that indicates the node type (default: "$type")</param>
 public class PolymorphicGraphJsonConverter<TNodeId>(
     Dictionary<string, Type> typeDiscriminators,
-    string discriminatorPropertyName = "$type") 
+    string discriminatorPropertyName = "$type")
     : JsonConverter<PolymorphicGraph<TNodeId>>
     where TNodeId : IEquatable<TNodeId>
 {
@@ -28,7 +28,6 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
         }
 
         var graph = new PolymorphicGraph<TNodeId>();
-        var nodeMap = new Dictionary<TNodeId, GraphNode<TNodeId>>();
         var edgeList = new List<(TNodeId fromId, TNodeId toId)>();
 
         while (reader.Read())
@@ -49,10 +48,10 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
             switch (propertyName)
             {
                 case "Nodes":
-                    ReadNodes(ref reader, options, graph, nodeMap);
+                    ReadNodes(ref reader, options, graph);
                     break;
                 case "Edges":
-                    PolymorphicGraphJsonConverter<TNodeId>.ReadEdges(ref reader, edgeList);
+                    ReadEdges(ref reader, edgeList);
                     break;
                 default:
                     reader.Skip();
@@ -69,8 +68,8 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
         return graph;
     }
 
-    private void ReadNodes(ref Utf8JsonReader reader, JsonSerializerOptions options, 
-        PolymorphicGraph<TNodeId> graph, Dictionary<TNodeId, GraphNode<TNodeId>> nodeMap)
+    private void ReadNodes(ref Utf8JsonReader reader, JsonSerializerOptions options,
+        PolymorphicGraph<TNodeId> graph)
     {
         if (reader.TokenType != JsonTokenType.StartArray)
         {
@@ -90,7 +89,6 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
                 if (node != null)
                 {
                     graph.AddNode(node);
-                    nodeMap[node.Id] = node;
                 }
             }
         }
@@ -113,7 +111,19 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
         }
 
         var json = root.GetRawText();
-        var node = JsonSerializer.Deserialize(json, nodeType, options) as GraphNode<TNodeId>;
+
+        // Create a new options instance that excludes this converter to prevent infinite recursion
+        var newOptions = new JsonSerializerOptions(options);
+        newOptions.Converters.Clear();
+        foreach (var converter in options.Converters)
+        {
+            if (converter is not PolymorphicGraphJsonConverter<TNodeId>)
+            {
+                newOptions.Converters.Add(converter);
+            }
+        }
+
+        var node = JsonSerializer.Deserialize(json, nodeType, newOptions) as GraphNode<TNodeId>;
 
         return node;
     }
@@ -217,8 +227,19 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
 
         writer.WriteString(discriminatorPropertyName, typeName);
 
-        // Write node properties using reflection or serialize the whole object
-        var nodeJson = JsonSerializer.SerializeToElement(node, nodeType, options);
+        // Create a new options instance that excludes this converter to prevent infinite recursion
+        var newOptions = new JsonSerializerOptions(options);
+        newOptions.Converters.Clear();
+        foreach (var converter in options.Converters)
+        {
+            if (converter is not PolymorphicGraphJsonConverter<TNodeId>)
+            {
+                newOptions.Converters.Add(converter);
+            }
+        }
+
+        // Write node properties
+        var nodeJson = JsonSerializer.SerializeToElement(node, nodeType, newOptions);
 
         foreach (var property in nodeJson.EnumerateObject())
         {
@@ -232,30 +253,5 @@ public class PolymorphicGraphJsonConverter<TNodeId>(
         }
 
         writer.WriteEndObject();
-    }
-}
-
-public class PolymorphicGraphJsonConverterFactory<TNodeId>
-    where TNodeId : IEquatable<TNodeId>
-{
-    private readonly Dictionary<string, Type> typeDiscriminators = [];
-    private string discriminatorPropertyName = "$type";
-
-    public PolymorphicGraphJsonConverterFactory<TNodeId> RegisterNodeType<TNode>(string typeName)
-        where TNode : GraphNode<TNodeId>
-    {
-        typeDiscriminators[typeName] = typeof(TNode);
-        return this;
-    }
-
-    public PolymorphicGraphJsonConverterFactory<TNodeId> WithDiscriminatorProperty(string propertyName)
-    {
-        discriminatorPropertyName = propertyName;
-        return this;
-    }
-
-    public PolymorphicGraphJsonConverter<TNodeId> Build()
-    {
-        return new PolymorphicGraphJsonConverter<TNodeId>(typeDiscriminators, discriminatorPropertyName);
     }
 }
