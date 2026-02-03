@@ -1,21 +1,57 @@
 ﻿namespace G2Data.Collections;
 
 public abstract class GraphNode<TNodeId>(TNodeId id)
+    where TNodeId : IEquatable<TNodeId>
 {
-    public TNodeId Id { get; set; } = id;
+    private readonly HashSet<GraphNode<TNodeId>> connections = [];
+    private readonly object connectionLock = new();
 
-    public List<GraphNode<TNodeId>> Connections { get; set; } = [];
+    public TNodeId Id { get; init; } = id;
+
+    public IReadOnlyCollection<GraphNode<TNodeId>> Connections
+    {
+        get
+        {
+            lock (connectionLock)
+            {
+                return connections.ToList().AsReadOnly();
+            }
+        }
+    }
+
+    internal IEnumerable<GraphNode<TNodeId>> GetConnections()
+    {
+        lock (connectionLock)
+        {
+            return connections.ToList();
+        }
+    }
 
     public void AddConnection(GraphNode<TNodeId> node)
     {
-        if (!Connections.Contains(node))
+        ArgumentNullException.ThrowIfNull(node);
+
+        lock (connectionLock)
         {
-            Connections.Add(node);
+            connections.Add(node);
         }
     }
+
+    internal bool RemoveConnection(TNodeId nodeId)
+    {
+        ArgumentNullException.ThrowIfNull(nodeId);
+
+        lock (connectionLock)
+        {
+            return connections.RemoveWhere(n => n.Id.Equals(nodeId)) > 0;
+        }
+    }
+
     internal bool WouldCreateCycle(GraphNode<TNodeId> targetNode)
     {
-        if (targetNode == null || Equals(targetNode.Id, Id))
+        ArgumentNullException.ThrowIfNull(targetNode);
+
+        if (Equals(targetNode.Id, Id))
             return true;
 
         return HasPathTo(targetNode, this);
@@ -48,7 +84,7 @@ public abstract class GraphNode<TNodeId>(TNodeId id)
             if (Equals(current.Id, to.Id))
                 return true;
 
-            foreach (var connection in current.Connections)
+            foreach (var connection in current.GetConnections())
             {
                 if (!visited.Contains(connection.Id))
                 {

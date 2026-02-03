@@ -7,6 +7,8 @@ public class BFSTraversal : GraphTraversal
 {
     public override IEnumerable<GraphNode<TNodeId>> Traverse<TNodeId>(GraphNode<TNodeId> startNode)
     {
+        ArgumentNullException.ThrowIfNull(startNode);
+
         var visited = new HashSet<TNodeId>();
         var queue = new Queue<GraphNode<TNodeId>>();
 
@@ -19,7 +21,7 @@ public class BFSTraversal : GraphTraversal
 
             yield return node;
 
-            foreach (var connection in node.Connections)
+            foreach (var connection in node.GetConnections())
             {
                 if (!visited.Contains(connection.Id))
                 {

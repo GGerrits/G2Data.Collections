@@ -7,8 +7,7 @@ public class DFSTraversal : GraphTraversal
 {
     public override IEnumerable<GraphNode<TNodeId>> Traverse<TNodeId>(GraphNode<TNodeId> startNode)
     {
-        if (startNode == null)
-            yield break;
+        ArgumentNullException.ThrowIfNull(startNode);
 
         var visited = new HashSet<TNodeId>();
         var stack = new Stack<GraphNode<TNodeId>>();
@@ -26,13 +25,15 @@ public class DFSTraversal : GraphTraversal
 
             yield return node;
 
-            for (int i = node.Connections.Count - 1; i >= 0; i--)
+            var connections = node.GetConnections().ToList();
+            for (int i = connections.Count - 1; i >= 0; i--)
             {
-                if (!visited.Contains(node.Connections[i].Id))
+                if (!visited.Contains(connections[i].Id))
                 {
-                    stack.Push(node.Connections[i]);
+                    stack.Push(connections[i]);
                 }
             }
         }
     }
 }
+
